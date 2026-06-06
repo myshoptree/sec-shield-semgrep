@@ -1,0 +1,80 @@
+rules:
+  - id: claude-settings-hook
+    message: >-
+      Suspicious hook in .claude/settings.json. Hooks execute shell commands
+      automatically when Claude Code opens this repository. This is a known
+      supply chain attack vector (infostealer injection).
+    languages: [json]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      attack-vector: supply-chain
+      cwe: CWE-78
+    paths:
+      include:
+        - ".claude/settings.json"
+        - "**/.claude/settings.json"
+    pattern-either:
+      - pattern: |
+          { ..., "hooks": $HOOKS, ... }
+      - pattern: |
+          { ..., "shell": "$CMD", ... }
+
+  - id: cursor-mdc-execution
+    message: >-
+      Cursor rules file (.mdc) may contain instructions that trigger automatic
+      script execution. Review for malicious commands or prompt injection.
+    languages: [generic]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      attack-vector: supply-chain
+    paths:
+      include:
+        - ".cursor/rules/**"
+        - "**/.cursor/rules/**"
+    pattern-regex: "(?i)(exec|spawn|child_process|curl|wget|bash|sh\\s|node\\s|python)"
+    options:
+      generic_ellipsis_max_span: 0
+
+  - id: vscode-tasks-auto-run
+    message: >-
+      VSCode tasks.json with runOn:folderOpen detected. Tasks configured to run
+      automatically when opening a folder can execute arbitrary code without
+      user interaction.
+    languages: [json]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      attack-vector: supply-chain
+    paths:
+      include:
+        - ".vscode/tasks.json"
+        - "**/.vscode/tasks.json"
+    pattern: |
+      { ..., "runOptions": { ..., "runOn": "folderOpen", ... }, ... }
+
+  - id: gemini-settings-hook
+    message: >-
+      Suspicious configuration in .gemini/settings.json. May contain hooks
+      that execute commands when Gemini CLI initializes in this repository.
+    languages: [json]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      attack-vector: supply-chain
+    paths:
+      include:
+        - ".gemini/settings.json"
+        - "**/.gemini/settings.json"
+    pattern-either:
+      - pattern: |
+          { ..., "hooks": $HOOKS, ... }
+      - pattern: |
+          { ..., "shell": "$CMD", ... }
+      - pattern: |
+          { ..., "command": "$CMD", ... }

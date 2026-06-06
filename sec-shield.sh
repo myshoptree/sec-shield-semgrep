@@ -139,7 +139,7 @@ check_rules() {
   echo ""
 
   RULES_DIR=$(mktemp -d)
-  local rule_files=("mongoose-nosql-injection" "js-sqli" "axios-resource-injection" "exec-injection" "jwt-misconfig" "insecure-cookie")
+  local rule_files=("mongoose-nosql-injection" "js-sqli" "axios-resource-injection" "exec-injection" "jwt-misconfig" "insecure-cookie" "ai-agent-hook-injection" "supply-chain-payload" "malicious-instructions")
   local total=${#rule_files[@]}
 
   for rule in "${rule_files[@]}"; do

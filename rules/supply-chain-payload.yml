@@ -1,0 +1,101 @@
+rules:
+  - id: eval-obfuscated-payload
+    message: >-
+      eval() called with encoded/obfuscated argument. This pattern is used by
+      infostealers to hide malicious code from static analysis. Common in
+      supply chain attacks targeting developer machines.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      attack-vector: supply-chain
+      cwe: CWE-95
+    pattern-either:
+      - pattern: eval(atob($X))
+      - pattern: eval(Buffer.from($X, "base64").toString(...))
+      - pattern: eval(Buffer.from($X, "hex").toString(...))
+      - pattern: eval(Buffer.from($X).toString(...))
+      - patterns:
+          - pattern: eval($DECODED)
+          - pattern-not: eval("use strict")
+
+  - id: crypto-hardcoded-key-payload
+    message: >-
+      Crypto decryption with hardcoded key detected. This pattern is used by
+      infostealers to decrypt embedded payloads at runtime, evading static
+      analysis. The AES key/IV should never be hardcoded in source.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      attack-vector: supply-chain
+      cwe: CWE-321
+    patterns:
+      - pattern-either:
+          - pattern: |
+              crypto.createDecipheriv($ALG, Buffer.from("$KEY", ...), ...)
+          - pattern: |
+              crypto.createDecipheriv($ALG, "$KEY", ...)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: "^[0-9a-fA-F]{16,}$"
+
+  - id: binary-download-tmp
+    message: >-
+      Script downloads a binary to /tmp and potentially executes it. This is a
+      common infostealer pattern: download runtime (bun, node) to temp dir,
+      then use it to run the exfiltration payload.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      attack-vector: supply-chain
+      cwe: CWE-94
+    pattern-either:
+      - pattern: |
+          child_process.exec("curl ... -o /tmp/...", ...)
+      - pattern: |
+          child_process.execSync("curl ... -o /tmp/...", ...)
+      - pattern: |
+          child_process.spawnSync("curl", [..., "/tmp/...", ...], ...)
+      - patterns:
+          - pattern: |
+              $CP.exec(`...${$URL}...`, ...)
+          - metavariable-regex:
+              metavariable: $URL
+              regex: ".*(/tmp/|curl|wget).*"
+
+  - id: package-json-script-hijack
+    message: >-
+      package.json script points to a suspicious path (.github/, hidden dir).
+      Attackers overwrite "test" or "postinstall" scripts to execute infostealers
+      disguised as project setup files.
+    languages: [json]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      attack-vector: supply-chain
+      cwe: CWE-78
+    paths:
+      include:
+        - "package.json"
+        - "**/package.json"
+    pattern-either:
+      - pattern: |
+          { ..., "scripts": { ..., "test": "node .github/$FILE", ... }, ... }
+      - pattern: |
+          { ..., "scripts": { ..., "postinstall": "node .github/$FILE", ... }, ... }
+      - pattern: |
+          { ..., "scripts": { ..., "preinstall": "node .github/$FILE", ... }, ... }
+      - pattern: |
+          { ..., "scripts": { ..., "prepare": "node .github/$FILE", ... }, ... }

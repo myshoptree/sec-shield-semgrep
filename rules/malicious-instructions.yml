@@ -1,0 +1,56 @@
+rules:
+  - id: markdown-hidden-instructions
+    message: >-
+      Markdown/text file contains hidden instructions for AI agents. Attackers
+      embed invisible or obfuscated commands in docs/skills that AI assistants
+      execute when reading the file. Check for prompt injection.
+    languages: [generic]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "9.0"
+      attack-vector: prompt-injection
+      cwe: CWE-77
+    paths:
+      include:
+        - "**/*.md"
+        - "**/*.mdc"
+        - "**/*.txt"
+    pattern-regex: "(?i)(ignore previous|ignore all|disregard|new instructions|system prompt|you are now|execute command|run the following|download and run|curl.*\\|.*bash|curl.*\\|.*sh|wget.*&&.*chmod)"
+    options:
+      generic_ellipsis_max_span: 0
+
+  - id: markdown-script-download
+    message: >-
+      Markdown file contains a curl/wget pipe-to-shell pattern. While common in
+      READMEs, this is also used in malicious skills/plugins to trick AI agents
+      into downloading and executing payloads.
+    languages: [generic]
+    severity: WARNING
+    metadata:
+      category: security
+      security-severity: "7.0"
+      attack-vector: supply-chain
+    paths:
+      include:
+        - "**/*.md"
+        - "**/*.mdc"
+    pattern-regex: "(curl|wget)\\s+[^|]*\\|\\s*(bash|sh|node|python|ruby)"
+    options:
+      generic_ellipsis_max_span: 0
+
+  - id: hidden-unicode-in-source
+    message: >-
+      File contains invisible Unicode characters (zero-width spaces, RTL override,
+      etc). These are used to hide malicious code or instructions from human review
+      while remaining executable by interpreters or readable by AI agents.
+    languages: [generic]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "9.0"
+      attack-vector: obfuscation
+      cwe: CWE-116
+    pattern-regex: "[\\x{200B}\\x{200C}\\x{200D}\\x{2060}\\x{FEFF}\\x{202A}\\x{202B}\\x{202C}\\x{202D}\\x{202E}]"
+    options:
+      generic_ellipsis_max_span: 0
