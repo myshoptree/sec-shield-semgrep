@@ -1,0 +1,26 @@
+rules:
+  - id: insecure-cookie-options
+    message: >-
+      Cookie set without secure: true and httpOnly: true. This exposes cookies
+      to interception over HTTP and XSS attacks.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "9.0"
+      owasp: A05:2021
+    pattern-either:
+      - pattern: |
+          $RES.cookie($NAME, $VAL)
+      - pattern: |
+          $RES.cookie($NAME, $VAL, { ..., secure: false, ... })
+      - pattern: |
+          $RES.cookie($NAME, $VAL, { ..., httpOnly: false, ... })
+      - pattern: |
+          cookies.set($KEY, $VAL)
+      - pattern: |
+          cookies.set($KEY, $VAL, { ..., secure: false, ... })
+      - pattern: |
+          cookies.set($KEY, $VAL, { ..., httpOnly: false, ... })

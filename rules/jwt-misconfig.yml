@@ -1,0 +1,44 @@
+rules:
+  - id: jwt-verify-no-algorithms
+    message: >-
+      JWT verification without specifying allowed algorithms. This can allow
+      an attacker to use 'none' algorithm or switch from RS256 to HS256.
+      Always specify algorithms explicitly.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "9.0"
+      owasp: A02:2021
+    patterns:
+      - pattern-either:
+          - pattern: |
+              jwt.verify($TOKEN, $SECRET)
+          - pattern: |
+              jwtVerify($TOKEN, $SECRET)
+          - pattern: |
+              $JWT.verify($TOKEN, $SECRET)
+      - pattern-not: |
+          jwt.verify($TOKEN, $SECRET, {algorithms: ...})
+      - pattern-not: |
+          $JWT.verify($TOKEN, $SECRET, {algorithms: ...})
+
+  - id: jwt-none-algorithm
+    message: >-
+      JWT configured with 'none' algorithm. This disables signature verification
+      and allows token forgery.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      owasp: A02:2021
+    pattern-either:
+      - pattern: |
+          { ..., algorithm: "none", ... }
+      - pattern: |
+          { ..., algorithms: [..., "none", ...], ... }

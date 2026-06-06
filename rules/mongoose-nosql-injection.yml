@@ -1,0 +1,34 @@
+rules:
+  - id: mongoose-nosql-injection
+    message: >-
+      User input passed directly to a Mongoose query operator ($where, $regex, $gt, $ne, etc.)
+      can allow NoSQL injection. Validate and sanitize input, or use explicit field matching.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      owasp: A03:2021
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $MODEL.find({..., $WHERE: $INPUT, ...})
+          - pattern: |
+              $MODEL.findOne({..., $WHERE: $INPUT, ...})
+          - pattern: |
+              $MODEL.findOneAndUpdate({..., $WHERE: $INPUT, ...}, ...)
+          - pattern: |
+              $MODEL.findOneAndDelete({..., $WHERE: $INPUT, ...})
+          - pattern: |
+              $MODEL.updateOne({..., $WHERE: $INPUT, ...}, ...)
+          - pattern: |
+              $MODEL.updateMany({..., $WHERE: $INPUT, ...}, ...)
+          - pattern: |
+              $MODEL.deleteOne({..., $WHERE: $INPUT, ...})
+          - pattern: |
+              $MODEL.deleteMany({..., $WHERE: $INPUT, ...})
+      - metavariable-regex:
+          metavariable: $WHERE
+          regex: "\\$(?:where|regex|gt|gte|lt|lte|ne|in|nin|or|and|not|exists|expr)"

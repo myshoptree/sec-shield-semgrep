@@ -1,0 +1,48 @@
+rules:
+  - id: tainted-sql-string
+    message: >-
+      User input used to construct a SQL string manually. Use parameterized queries
+      or an ORM to prevent SQL injection.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      owasp: A03:2021
+    mode: taint
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $FUNC ($SQL, ...)
+              - pattern-inside: |
+                  $SMTH. ... .$FUNC ($SQL, ...)
+          - metavariable-regex:
+              metavariable: $FUNC
+              regex: .*\b(?i)query\b.*
+          - pattern: $SQL
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern-either:
+                      - pattern: |
+                          "$SQLSTR" + $EXPR
+                      - pattern: |
+                          "$SQLSTR".concat(..., $EXPR, ...)
+                  - metavariable-regex:
+                      metavariable: $SQLSTR
+                      regex: .*\b(?i)(select|delete|insert|create|update|alter|drop)\b.*
+              - patterns:
+                  - pattern: |
+                      `...${$EXPR}...`
+                  - pattern-regex: >
+                      .*\b(?i)(select|delete|insert|create|update|alter|drop)\b.*
+          - pattern-not-inside: |
+              console.$LOG(...)
+          - metavariable-pattern:
+              metavariable: $EXPR
+              patterns:
+                  - pattern-not-regex: .*(?i)constant.*

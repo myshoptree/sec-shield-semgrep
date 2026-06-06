@@ -1,0 +1,36 @@
+rules:
+  - id: exec-injection
+    message: >-
+      User input concatenated into exec() command. This allows arbitrary command execution.
+      Use execFile() with an argument array, or avoid shell execution entirely.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      owasp: A03:2021
+    mode: taint
+    pattern-sinks:
+      - patterns:
+          - pattern-inside: |
+              exec($COMMAND, ...)
+          - pattern-not-inside: |
+              ...$SMTH.exec($COMMAND, ...)
+          - pattern: $COMMAND
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern-either:
+                      - pattern: |
+                          $CMD + $EXPR
+                      - pattern: |
+                          $CMD.concat(..., $EXPR, ...)
+              - pattern: |
+                  `...${$EXPR}...`
+          - metavariable-pattern:
+              metavariable: $EXPR
+              patterns:
+                  - pattern-not-regex: .*(?i)constant.*

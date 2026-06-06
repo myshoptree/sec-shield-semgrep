@@ -1,0 +1,48 @@
+rules:
+  - id: axios-resource-injection
+    message: >-
+      Resource injection in axios/HTTP call detected. Concatenating user input
+      to a URL allows endpoint manipulation. Use encodeURIComponent() for path params
+      and the params option for query parameters.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      owasp: A10:2021
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  $FUNC(..., $PARAM, ...) {
+                  ...
+                  }
+              - pattern: |
+                  function $FUNC(..., $PARAM, ...) {
+                  ...
+                  }
+          - metavariable-pattern:
+              metavariable: $PARAM
+              patterns:
+                - pattern-not-regex: .*(?i)constant.*
+                - pattern-not-regex: .*(?i)base.?url.*
+          - focus-metavariable: $PARAM
+    pattern-sanitizers:
+      - pattern: encodeURIComponent(...)
+      - pattern-regex: .*(?i)signedUrl.*
+    pattern-sinks:
+      - patterns:
+          - pattern-inside:
+              pattern-either:
+                - pattern: $AXIOS ($URL, ...)
+                - pattern: $AXIOS. ... .$FUNC ($URL, ...)
+          - metavariable-regex:
+              metavariable: $AXIOS
+              regex: .*\b(?i)(axios|httpservice|http)\b.*
+          - metavariable-regex:
+              metavariable: $FUNC
+              regex: .*\b(?i)(get|post|put|delete|head|options|patch)\b.*
+          - pattern: $URL
