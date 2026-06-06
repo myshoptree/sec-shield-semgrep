@@ -45,19 +45,36 @@ check_deps() {
   echo ""
 
   local missing=()
+  local outdated=()
   local os_type=$(uname -s)
 
+  # Check semgrep
   if command -v semgrep &>/dev/null; then
     local sg_version=$(semgrep --version 2>/dev/null || echo "?")
-    echo -e "  ${GREEN}✓${NC} semgrep  ${DIM}v${sg_version}${NC}"
+    local sg_latest=$(curl -sSf "https://api.github.com/repos/semgrep/semgrep/releases/latest" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','').lstrip('v'))" 2>/dev/null || echo "")
+
+    if [ -n "$sg_latest" ] && [ "$sg_version" != "$sg_latest" ]; then
+      echo -e "  ${YELLOW}⬆${NC} semgrep  ${DIM}v${sg_version}${NC} → ${GREEN}v${sg_latest} disponible${NC}"
+      outdated+=("semgrep")
+    else
+      echo -e "  ${GREEN}✓${NC} semgrep  ${DIM}v${sg_version} (última)${NC}"
+    fi
   else
     echo -e "  ${RED}✗${NC} semgrep  ${DIM}(no instalado)${NC}"
     missing+=("semgrep")
   fi
 
+  # Check gitleaks
   if command -v gitleaks &>/dev/null; then
     local gl_version=$(gitleaks version 2>/dev/null || echo "?")
-    echo -e "  ${GREEN}✓${NC} gitleaks ${DIM}v${gl_version}${NC}"
+    local gl_latest=$(curl -sSf "https://api.github.com/repos/gitleaks/gitleaks/releases/latest" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','').lstrip('v'))" 2>/dev/null || echo "")
+
+    if [ -n "$gl_latest" ] && [ "$gl_version" != "$gl_latest" ]; then
+      echo -e "  ${YELLOW}⬆${NC} gitleaks ${DIM}v${gl_version}${NC} → ${GREEN}v${gl_latest} disponible${NC}"
+      outdated+=("gitleaks")
+    else
+      echo -e "  ${GREEN}✓${NC} gitleaks ${DIM}v${gl_version} (última)${NC}"
+    fi
   else
     echo -e "  ${RED}✗${NC} gitleaks ${DIM}(no instalado)${NC}"
     missing+=("gitleaks")
@@ -65,6 +82,25 @@ check_deps() {
 
   echo ""
 
+  # Show update commands if outdated
+  if [ ${#outdated[@]} -gt 0 ]; then
+    echo -e "  ${YELLOW}Actualizar:${NC}"
+    if [ "$os_type" = "Darwin" ]; then
+      echo -e "    brew upgrade ${outdated[*]}"
+    else
+      for dep in "${outdated[@]}"; do
+        case "$dep" in
+          semgrep) echo -e "    pip3 install --upgrade semgrep" ;;
+          gitleaks) echo -e "    go install github.com/zricethezav/gitleaks/v8@latest" ;;
+        esac
+      done
+    fi
+    echo ""
+    echo -e "  ${DIM}Continuando con versiones actuales...${NC}"
+    echo ""
+  fi
+
+  # Abort if missing
   if [ ${#missing[@]} -gt 0 ]; then
     echo -e "  ${YELLOW}Para continuar necesitas instalar: ${BOLD}${missing[*]}${NC}"
     echo ""
