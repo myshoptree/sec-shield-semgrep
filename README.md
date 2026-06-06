@@ -7,13 +7,13 @@ Security scanner para proyectos myshoptree. Ejecuta Gitleaks (secretos) + Semgre
 Escanear el directorio actual:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/myshoptree/sec-shield-semgrep/main/scan.sh | bash -s .
+curl -fsSL https://raw.githubusercontent.com/myshoptree/sec-shield-semgrep/main/sec-shield.sh | bash -s .
 ```
 
 Escanear un directorio específico:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/myshoptree/sec-shield-semgrep/main/scan.sh | bash -s /path/to/repo
+curl -fsSL https://raw.githubusercontent.com/myshoptree/sec-shield-semgrep/main/sec-shield.sh | bash -s /path/to/repo
 ```
 
 ## Instalar como pre-push hook
@@ -43,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/myshoptree/sec-shield-semgrep/main/
 
 ```
 sec-shield-semgrep/
-├── scan.sh              # Script principal (entry point)
+├── sec-shield.sh              # Script principal (entry point)
 ├── install-hook.sh      # Instalador de pre-push hook
 ├── rules/               # Reglas Semgrep custom
 │   ├── mongoose-nosql-injection.yml
