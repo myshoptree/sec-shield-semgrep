@@ -152,8 +152,35 @@ check_rules() {
   done
 
   RULES_DOWNLOADED=$(find "$RULES_DIR" -name "*.yml" 2>/dev/null | wc -l | tr -d ' ')
+
+  # Validate rules actually parse correctly
+  local valid_rules=0
+  if [ "$RULES_DOWNLOADED" -gt 0 ]; then
+    local validate_output
+    validate_output=$(semgrep scan --config="$RULES_DIR" --validate 2>&1) || true
+    valid_rules=$(echo "$validate_output" | grep -o "[0-9]* valid" | grep -o "[0-9]*" || echo "0")
+    valid_rules=$((valid_rules + 0))
+
+    local invalid_rules
+    invalid_rules=$(echo "$validate_output" | grep -o "[0-9]* invalid" | grep -o "[0-9]*" || echo "0")
+    invalid_rules=$((invalid_rules + 0))
+
+    if [ "$invalid_rules" -gt 0 ]; then
+      echo ""
+      echo -e "  ${RED}⚠ ${invalid_rules} regla(s) con error de sintaxis${NC}"
+    fi
+  fi
+
+  # Count total rule IDs loaded
+  local rule_ids=0
+  if [ "$RULES_DOWNLOADED" -gt 0 ]; then
+    rule_ids=$(grep -r "^  - id:" "$RULES_DIR" 2>/dev/null | wc -l | tr -d ' ')
+    rule_ids=$((rule_ids + 0))
+  fi
+
   echo ""
-  echo -e "  ${DIM}Custom: ${RULES_DOWNLOADED}/${total} | Community: semgrep registry (auto-update)${NC}"
+  echo -e "  ${DIM}Custom: ${RULES_DOWNLOADED}/${total} archivos | ${rule_ids} reglas cargadas${NC}"
+  echo -e "  ${DIM}Community: semgrep registry (auto-update, ~3000+ reglas)${NC}"
   echo ""
 }
 
