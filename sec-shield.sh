@@ -3,11 +3,12 @@ set -uo pipefail
 
 # ╔══════════════════════════════════════════════════════════════╗
 # ║  sec-shield — security scanner CLI                          ║
-# ║  Usage: curl -fsSL <raw-url>/scan.sh | bash -s [path]      ║
+# ║  Usage: curl -fsSL <raw-url>/sec-shield.sh | bash -s [path]║
 # ╚══════════════════════════════════════════════════════════════╝
 
 RULES_REPO="https://raw.githubusercontent.com/myshoptree/sec-shield-semgrep/main/rules"
-VERSION="1.0.0"
+RULES_MANIFEST="https://raw.githubusercontent.com/myshoptree/sec-shield-semgrep/main/rules/manifest.txt"
+VERSION="1.1.0"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -21,8 +22,14 @@ TARGET="${1:-.}"
 SECRETS_COUNT=0
 SEMGREP_CUSTOM_COUNT=0
 SEMGREP_COMMUNITY_COUNT=0
+OSV_COUNT=0
 RULES_DOWNLOADED=0
 RULES_DIR=""
+
+cleanup() {
+  [ -n "$RULES_DIR" ] && rm -rf "$RULES_DIR"
+}
+trap cleanup EXIT INT TERM
 
 # ─── Banner ───────────────────────────────────────────────────
 
@@ -48,10 +55,40 @@ check_deps() {
   local outdated=()
   local os_type=$(uname -s)
 
+  # Build curl auth header for GitHub API (avoid rate-limits)
+  local gh_auth=()
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    gh_auth=(-H "Authorization: token ${GITHUB_TOKEN}")
+  fi
+
+  # Check python3
+  if command -v python3 &>/dev/null; then
+    local py_version=$(python3 --version 2>/dev/null | awk '{print $2}')
+    echo -e "  ${GREEN}✓${NC} python3  ${DIM}v${py_version}${NC}"
+  else
+    echo -e "  ${RED}✗${NC} python3  ${DIM}(no instalado)${NC}"
+    missing+=("python3")
+  fi
+
+  # Check osv-scanner (optional)
+  if command -v osv-scanner &>/dev/null; then
+    local osv_version=$(osv-scanner --version 2>/dev/null | awk '{print $NF}' || echo "?")
+    local osv_latest=$(curl -sSf "${gh_auth[@]+"${gh_auth[@]}"}" "https://api.github.com/repos/google/osv-scanner/releases/latest" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','').lstrip('v'))" 2>/dev/null || echo "")
+
+    if [ -n "$osv_latest" ] && [ "$osv_version" != "$osv_latest" ]; then
+      echo -e "  ${YELLOW}⬆${NC} osv-scanner ${DIM}v${osv_version}${NC} → ${GREEN}v${osv_latest} disponible${NC}"
+      outdated+=("osv-scanner")
+    else
+      echo -e "  ${GREEN}✓${NC} osv-scanner ${DIM}v${osv_version} (última)${NC}"
+    fi
+  else
+    echo -e "  ${YELLOW}○${NC} osv-scanner ${DIM}(no instalado, escaneo de dependencias deshabilitado)${NC}"
+  fi
+
   # Check semgrep
   if command -v semgrep &>/dev/null; then
     local sg_version=$(semgrep --version 2>/dev/null || echo "?")
-    local sg_latest=$(curl -sSf "https://api.github.com/repos/semgrep/semgrep/releases/latest" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','').lstrip('v'))" 2>/dev/null || echo "")
+    local sg_latest=$(curl -sSf "${gh_auth[@]+"${gh_auth[@]}"}" "https://api.github.com/repos/semgrep/semgrep/releases/latest" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','').lstrip('v'))" 2>/dev/null || echo "")
 
     if [ -n "$sg_latest" ] && [ "$sg_version" != "$sg_latest" ]; then
       echo -e "  ${YELLOW}⬆${NC} semgrep  ${DIM}v${sg_version}${NC} → ${GREEN}v${sg_latest} disponible${NC}"
@@ -67,7 +104,7 @@ check_deps() {
   # Check gitleaks
   if command -v gitleaks &>/dev/null; then
     local gl_version=$(gitleaks version 2>/dev/null || echo "?")
-    local gl_latest=$(curl -sSf "https://api.github.com/repos/gitleaks/gitleaks/releases/latest" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','').lstrip('v'))" 2>/dev/null || echo "")
+    local gl_latest=$(curl -sSf "${gh_auth[@]+"${gh_auth[@]}"}" "https://api.github.com/repos/gitleaks/gitleaks/releases/latest" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','').lstrip('v'))" 2>/dev/null || echo "")
 
     if [ -n "$gl_latest" ] && [ "$gl_version" != "$gl_latest" ]; then
       echo -e "  ${YELLOW}⬆${NC} gitleaks ${DIM}v${gl_version}${NC} → ${GREEN}v${gl_latest} disponible${NC}"
@@ -82,6 +119,16 @@ check_deps() {
 
   echo ""
 
+  # Suggest osv-scanner install if missing
+  if ! command -v osv-scanner &>/dev/null; then
+    if [ "$os_type" = "Darwin" ]; then
+      echo -e "  ${DIM}Opcional: brew install osv-scanner (escaneo de dependencias)${NC}"
+    else
+      echo -e "  ${DIM}Opcional: go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest${NC}"
+    fi
+    echo ""
+  fi
+
   # Show update commands if outdated
   if [ ${#outdated[@]} -gt 0 ]; then
     echo -e "  ${YELLOW}Actualizar:${NC}"
@@ -92,6 +139,7 @@ check_deps() {
         case "$dep" in
           semgrep) echo -e "    pip3 install --upgrade semgrep" ;;
           gitleaks) echo -e "    go install github.com/zricethezav/gitleaks/v8@latest" ;;
+          osv-scanner) echo -e "    go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest" ;;
         esac
       done
     fi
@@ -113,6 +161,10 @@ check_deps() {
       echo -e "  ${CYAN}Linux:${NC}"
       for dep in "${missing[@]}"; do
         case "$dep" in
+          python3)
+            echo -e "    sudo apt-get install python3"
+            echo -e "    ${DIM}# o: sudo dnf install python3${NC}"
+            ;;
           semgrep)
             echo -e "    pip3 install semgrep"
             echo -e "    ${DIM}# o: pipx install semgrep${NC}"
@@ -139,7 +191,22 @@ check_rules() {
   echo ""
 
   RULES_DIR=$(mktemp -d)
-  local rule_files=("mongoose-nosql-injection" "js-sqli" "axios-resource-injection" "exec-injection" "jwt-misconfig" "insecure-cookie" "ai-agent-hook-injection" "supply-chain-payload" "malicious-instructions")
+
+  # Try dynamic manifest first, fallback to hardcoded list
+  local rule_files=()
+  local manifest
+  manifest=$(curl -sSfL "$RULES_MANIFEST" 2>/dev/null || echo "")
+
+  if [ -n "$manifest" ]; then
+    while IFS= read -r rule; do
+      [ -n "$rule" ] && rule_files+=("$rule")
+    done <<< "$manifest"
+  fi
+
+  if [ ${#rule_files[@]} -eq 0 ]; then
+    rule_files=("mongoose-nosql-injection" "js-sqli" "axios-resource-injection" "exec-injection" "jwt-misconfig" "insecure-cookie" "ai-agent-hook-injection" "supply-chain-payload" "malicious-instructions")
+  fi
+
   local total=${#rule_files[@]}
 
   for rule in "${rule_files[@]}"; do
@@ -190,22 +257,110 @@ run_gitleaks() {
   echo -e "${BOLD}═══ Secretos (Gitleaks) ═══${NC}"
   echo ""
 
-  local gl_output
-  gl_output=$(gitleaks detect --source="$TARGET" -v 2>&1) || true
+  local gl_report
+  gl_report=$(mktemp)
 
-  local count
-  count=$(echo "$gl_output" | grep -c "^Finding:" || true)
-  SECRETS_COUNT=$((count + 0))
+  gitleaks detect --source="$TARGET" --report-format json --report-path "$gl_report" 2>/dev/null || true
+
+  SECRETS_COUNT=$(python3 -c "
+import sys, json
+try:
+    data = json.load(open('$gl_report'))
+    print(len(data) if isinstance(data, list) else 0)
+except:
+    print(0)
+" 2>/dev/null || echo 0)
+  SECRETS_COUNT=$((SECRETS_COUNT + 0))
 
   if [ "$SECRETS_COUNT" -gt 0 ]; then
     echo -e "  ${RED}⚠ ${SECRETS_COUNT} secreto(s) detectado(s):${NC}"
     echo ""
-    echo "$gl_output" | grep -E "^(Finding:|RuleID:|File:|Line:)" | while IFS= read -r line; do
-      echo -e "    ${DIM}${line}${NC}"
-    done
+    python3 -c "
+import json
+data = json.load(open('$gl_report'))
+for finding in data:
+    rule = finding.get('RuleID', '?')
+    file = finding.get('File', '?')
+    line = finding.get('StartLine', '?')
+    print(f'    RuleID: {rule}')
+    print(f'    File:   {file}:{line}')
+    print()
+" 2>/dev/null || true
   else
     echo -e "  ${GREEN}✓ Sin secretos detectados${NC}"
   fi
+
+  rm -f "$gl_report"
+  echo ""
+}
+
+# ─── OSV-Scanner (dependencias) ───────────────────────────────
+
+run_osv_scanner() {
+  if ! command -v osv-scanner &>/dev/null; then
+    return 0
+  fi
+
+  echo -e "${BOLD}═══ Dependencias (OSV-Scanner) ═══${NC}"
+  echo ""
+
+  local osv_report
+  osv_report=$(mktemp)
+
+  osv-scanner scan -r "$TARGET" --format json > "$osv_report" 2>/dev/null
+  local exit_code=$?
+
+  case $exit_code in
+    0)
+      echo -e "  ${GREEN}✓ Sin vulnerabilidades conocidas en dependencias${NC}"
+      ;;
+    1)
+      OSV_COUNT=$(python3 -c "
+import json, sys
+try:
+    data = json.load(open('$osv_report'))
+    groups = set()
+    for result in data.get('results', []):
+        for pkg in result.get('packages', []):
+            for group in pkg.get('groups', []):
+                for gid in group.get('ids', []):
+                    groups.add(gid)
+    print(len(groups))
+except:
+    print(0)
+" 2>/dev/null || echo 0)
+      OSV_COUNT=$((OSV_COUNT + 0))
+
+      echo -e "  ${RED}⚠ ${OSV_COUNT} vulnerabilidad(es) en dependencias:${NC}"
+      echo ""
+      python3 -c "
+import json
+data = json.load(open('$osv_report'))
+for result in data.get('results', []):
+    source = result.get('source', {}).get('path', '?')
+    for pkg in result.get('packages', []):
+        name = pkg.get('package', {}).get('name', '?')
+        version = pkg.get('package', {}).get('version', '?')
+        ecosystem = pkg.get('package', {}).get('ecosystem', '?')
+        vulns = pkg.get('vulnerabilities', [])
+        ids = [v.get('id', '?') for v in vulns[:3]]
+        ids_str = ', '.join(ids)
+        if len(vulns) > 3:
+            ids_str += f' (+{len(vulns)-3} más)'
+        print(f'    {name}@{version} ({ecosystem})')
+        print(f'      {ids_str}')
+        print()
+" 2>/dev/null || true
+      ;;
+    128)
+      echo -e "  ${DIM}○ No se encontraron lockfiles en el proyecto (saltando)${NC}"
+      ;;
+    *)
+      echo -e "  ${YELLOW}○ Error ejecutando osv-scanner (código: ${exit_code})${NC}"
+      ;;
+  esac
+
+  rm -f "$osv_report"
   echo ""
 }
 
@@ -284,13 +439,12 @@ for r in data.get('results', []):
     echo ""
   fi
 
-  rm -rf "$RULES_DIR"
 }
 
 # ─── Summary ─────────────────────────────────────────────────
 
 summary() {
-  local total=$((SECRETS_COUNT + SEMGREP_CUSTOM_COUNT + SEMGREP_COMMUNITY_COUNT))
+  local total=$((SECRETS_COUNT + SEMGREP_CUSTOM_COUNT + SEMGREP_COMMUNITY_COUNT + OSV_COUNT))
 
   echo -e "${CYAN}┌──────────────────────────────────────────────┐${NC}"
   echo -e "${CYAN}│           ${BOLD}RESUMEN DE SEGURIDAD${NC}${CYAN}               │${NC}"
@@ -300,6 +454,12 @@ summary() {
     printf "${CYAN}│${NC}  ${RED}⚠${NC}  Secretos expuestos:    ${BOLD}%-5s${NC}${CYAN}│${NC}\n" "$SECRETS_COUNT"
   else
     printf "${CYAN}│${NC}  ${GREEN}✓${NC}  Secretos expuestos:    %-5s${CYAN}│${NC}\n" "0"
+  fi
+
+  if [ "$OSV_COUNT" -gt 0 ]; then
+    printf "${CYAN}│${NC}  ${RED}⚠${NC}  Dependencias (OSV):    ${BOLD}%-5s${NC}${CYAN}│${NC}\n" "$OSV_COUNT"
+  else
+    printf "${CYAN}│${NC}  ${GREEN}✓${NC}  Dependencias (OSV):    %-5s${CYAN}│${NC}\n" "0"
   fi
 
   if [ "$SEMGREP_CUSTOM_COUNT" -gt 0 ]; then
@@ -325,6 +485,8 @@ summary() {
     echo -e "  ${GREEN}✓ El proyecto no presenta vulnerabilidades conocidas.${NC}"
   fi
   echo ""
+
+  return "$total"
 }
 
 # ─── Main ─────────────────────────────────────────────────────
@@ -333,5 +495,6 @@ banner
 check_deps
 check_rules
 run_gitleaks
+run_osv_scanner
 run_semgrep
-summary
+summary || exit 1
