@@ -128,16 +128,16 @@ run_gitleaks() {
   echo ""
 
   local gl_output
-  gl_output=$(gitleaks detect --source="$TARGET" --no-banner --no-color -v 2>&1) || true
+  gl_output=$(gitleaks detect --source="$TARGET" -v 2>&1) || true
 
   local count
-  count=$(echo "$gl_output" | grep -c "Secret:" || true)
+  count=$(echo "$gl_output" | grep -c "^Finding:" || true)
   SECRETS_COUNT=$((count + 0))
 
   if [ "$SECRETS_COUNT" -gt 0 ]; then
     echo -e "  ${RED}⚠ ${SECRETS_COUNT} secreto(s) detectado(s):${NC}"
     echo ""
-    echo "$gl_output" | grep -B1 -A1 "Secret:" | while IFS= read -r line; do
+    echo "$gl_output" | grep -E "^(Finding:|RuleID:|File:|Line:)" | while IFS= read -r line; do
       echo -e "    ${DIM}${line}${NC}"
     done
   else
