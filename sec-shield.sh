@@ -72,7 +72,7 @@ check_deps() {
 
   # Check osv-scanner (optional)
   if command -v osv-scanner &>/dev/null; then
-    local osv_version=$(osv-scanner --version 2>/dev/null | awk '{print $NF}' || echo "?")
+    local osv_version=$(osv-scanner --version 2>/dev/null | head -1 | awk '{print $NF}' || echo "?")
     local osv_latest=$(curl -sSf "${gh_auth[@]+"${gh_auth[@]}"}" "https://api.github.com/repos/google/osv-scanner/releases/latest" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name','').lstrip('v'))" 2>/dev/null || echo "")
 
     if [ -n "$osv_latest" ] && [ "$osv_version" != "$osv_latest" ]; then
@@ -266,7 +266,11 @@ run_gitleaks() {
 import sys, json
 try:
     data = json.load(open('$gl_report'))
-    print(len(data) if isinstance(data, list) else 0)
+    seen = set()
+    for f in (data if isinstance(data, list) else []):
+        key = f'{f.get(\"RuleID\",\"\")}:{f.get(\"File\",\"\")}:{f.get(\"StartLine\",\"\")}'
+        seen.add(key)
+    print(len(seen))
 except:
     print(0)
 " 2>/dev/null || echo 0)
@@ -278,10 +282,15 @@ except:
     python3 -c "
 import json
 data = json.load(open('$gl_report'))
+seen = set()
 for finding in data:
     rule = finding.get('RuleID', '?')
     file = finding.get('File', '?')
     line = finding.get('StartLine', '?')
+    key = f'{rule}:{file}:{line}'
+    if key in seen:
+        continue
+    seen.add(key)
     print(f'    RuleID: {rule}')
     print(f'    File:   {file}:{line}')
     print()
