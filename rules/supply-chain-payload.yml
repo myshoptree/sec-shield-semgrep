@@ -26,7 +26,7 @@ rules:
     message: >-
       Crypto decryption with hardcoded key detected. This pattern is used by
       infostealers to decrypt embedded payloads at runtime, evading static
-      analysis. The AES key/IV should never be hardcoded in source.
+      analysis. Seen with AES-128-GCM and AES-256-CBC in real campaigns.
     languages:
       - javascript
       - typescript
@@ -36,15 +36,38 @@ rules:
       security-severity: "10.0"
       attack-vector: supply-chain
       cwe: CWE-321
-    patterns:
-      - pattern-either:
+    pattern-either:
+      - patterns:
           - pattern: |
               crypto.createDecipheriv($ALG, Buffer.from("$KEY", ...), ...)
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: "^[0-9a-fA-F]{16,}$"
+      - patterns:
           - pattern: |
               crypto.createDecipheriv($ALG, "$KEY", ...)
-      - metavariable-regex:
-          metavariable: $KEY
-          regex: "^[0-9a-fA-F]{16,}$"
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: "^[0-9a-fA-F]{16,}$"
+
+  - id: xor-obfuscation-payload
+    message: >-
+      XOR-based string obfuscation detected. Used by TrapDoor Stealer and
+      BufferZoneCorp campaigns to hide C2 URLs and payloads from static analysis.
+      Pattern: byte array XOR'd with hardcoded key, then joined into string.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "9.0"
+      attack-vector: supply-chain
+      cwe: CWE-95
+    patterns:
+      - pattern: $BUF.map(($B, $I) => $B ^ $KEY.charCodeAt($I % $KEY.length))
+      - pattern-not-inside: |
+          // test ...
 
   - id: binary-download-tmp
     message: >-
@@ -76,9 +99,9 @@ rules:
 
   - id: package-json-script-hijack
     message: >-
-      package.json script points to a suspicious path (.github/, hidden dir).
-      Attackers overwrite "test" or "postinstall" scripts to execute infostealers
-      disguised as project setup files.
+      package.json lifecycle script points to a suspicious path (.github/, hidden dir).
+      Attackers overwrite install hooks and test scripts to execute infostealers.
+      postinstall/preinstall run automatically on every npm install.
     languages: [json]
     severity: ERROR
     metadata:
@@ -99,3 +122,55 @@ rules:
           { ..., "scripts": { ..., "preinstall": "node .github/$FILE", ... }, ... }
       - pattern: |
           { ..., "scripts": { ..., "prepare": "node .github/$FILE", ... }, ... }
+      - pattern: |
+          { ..., "scripts": { ..., "install": "node .github/$FILE", ... }, ... }
+      - pattern: |
+          { ..., "scripts": { ..., "prepublish": "node .github/$FILE", ... }, ... }
+
+  - id: npmrc-attacker-registry
+    message: >-
+      .npmrc points to a non-official npm registry. This is a dependency
+      confusion / supply chain attack vector: all packages are resolved
+      against the attacker's registry instead of npmjs.org.
+    languages: [generic]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "9.0"
+      attack-vector: supply-chain
+      cwe: CWE-830
+    paths:
+      include:
+        - ".npmrc"
+        - "**/.npmrc"
+    pattern-regex: "^registry\\s*=\\s*(?!https://registry\\.npmjs\\.org)"
+    options:
+      generic_ellipsis_max_span: 0
+
+  - id: cloud-metadata-probe
+    message: >-
+      Code accesses cloud metadata endpoints (AWS/GCP/Azure IMDS). This is a
+      credential theft pattern used by infostealers running inside CI/CD or
+      developer machines to steal instance IAM credentials.
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "9.0"
+      attack-vector: supply-chain
+      cwe: CWE-200
+    pattern-either:
+      - pattern: |
+          $HTTP.$METHOD("http://169.254.169.254/...", ...)
+      - pattern: |
+          $HTTP.$METHOD("http://metadata.google.internal/...", ...)
+      - pattern: |
+          $HTTP.$METHOD("http://169.254.169.254$PATH", ...)
+      - patterns:
+          - pattern: |
+              fetch($URL, ...)
+          - metavariable-regex:
+              metavariable: $URL
+              regex: ".*(169\\.254\\.169\\.254|metadata\\.google\\.internal|metadata\\.azure\\.com).*"

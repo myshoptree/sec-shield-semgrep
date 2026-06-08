@@ -16,6 +16,14 @@ rules:
         - "**/*.md"
         - "**/*.mdc"
         - "**/*.txt"
+        - "CLAUDE.md"
+        - "**/CLAUDE.md"
+        - "AGENTS.md"
+        - "**/AGENTS.md"
+        - ".github/copilot-instructions.md"
+        - "**/.github/copilot-instructions.md"
+        - ".github/instructions/**"
+        - "**/.github/instructions/**"
     pattern-regex: "(?i)(ignore previous|ignore all|disregard|new instructions|system prompt|you are now|execute command|run the following|download and run|curl.*\\|.*bash|curl.*\\|.*sh|wget.*&&.*chmod)"
     options:
       generic_ellipsis_max_span: 0
@@ -44,6 +52,7 @@ rules:
       File contains invisible Unicode characters (zero-width spaces, RTL override,
       etc). These are used to hide malicious code or instructions from human review
       while remaining executable by interpreters or readable by AI agents.
+      Confirmed in TrapDoor Stealer targeting CLAUDE.md and .cursorrules.
     languages: [generic]
     severity: ERROR
     metadata:
@@ -52,5 +61,45 @@ rules:
       attack-vector: obfuscation
       cwe: CWE-116
     pattern-regex: "[\\x{200B}\\x{200C}\\x{200D}\\x{2060}\\x{FEFF}\\x{202A}\\x{202B}\\x{202C}\\x{202D}\\x{202E}]"
+    options:
+      generic_ellipsis_max_span: 0
+
+  - id: github-actions-secrets-dump
+    message: >-
+      GitHub Actions workflow dumps all secrets via toJSON(secrets). This
+      technique exfiltrates every secret in the repository to workflow artifacts
+      or logs. Confirmed in the Intercom compromise and Mini Shai-Hulud campaign.
+    languages: [generic]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "10.0"
+      attack-vector: supply-chain
+      cwe: CWE-312
+    paths:
+      include:
+        - ".github/workflows/**"
+        - "**/.github/workflows/**"
+    pattern-regex: "\\$\\{\\{\\s*toJSON\\(secrets\\)\\s*\\}\\}"
+    options:
+      generic_ellipsis_max_span: 0
+
+  - id: github-actions-env-poisoning
+    message: >-
+      GitHub Actions workflow modifies GOPROXY, GOSUMDB, or proxy settings via
+      GITHUB_ENV. Used by BufferZoneCorp to redirect Go module resolution to
+      attacker-controlled servers.
+    languages: [generic]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "9.0"
+      attack-vector: supply-chain
+      cwe: CWE-610
+    paths:
+      include:
+        - ".github/workflows/**"
+        - "**/.github/workflows/**"
+    pattern-regex: "(?i)(GOPROXY|GOSUMDB|GONOSUMDB|GOFLAGS|HTTP_PROXY|HTTPS_PROXY)\\s*=.*>>\\s*\\$GITHUB_ENV"
     options:
       generic_ellipsis_max_span: 0

@@ -14,7 +14,9 @@ rules:
     paths:
       include:
         - ".claude/settings.json"
+        - ".claude/settings.local.json"
         - "**/.claude/settings.json"
+        - "**/.claude/settings.local.json"
     pattern-either:
       - pattern: |
           { ..., "hooks": $HOOKS, ... }
@@ -23,8 +25,9 @@ rules:
 
   - id: cursor-mdc-execution
     message: >-
-      Cursor rules file (.mdc) may contain instructions that trigger automatic
-      script execution. Review for malicious commands or prompt injection.
+      Cursor rules file (.mdc) or Cline rules (.clinerules) may contain
+      instructions that trigger automatic script execution. Review for
+      malicious commands or prompt injection.
     languages: [generic]
     severity: ERROR
     metadata:
@@ -35,6 +38,10 @@ rules:
       include:
         - ".cursor/rules/**"
         - "**/.cursor/rules/**"
+        - ".cursorrules"
+        - "**/.cursorrules"
+        - ".clinerules"
+        - "**/.clinerules"
     pattern-regex: "(?i)(exec|spawn|child_process|curl|wget|bash|sh\\s|node\\s|python)"
     options:
       generic_ellipsis_max_span: 0
@@ -43,7 +50,7 @@ rules:
     message: >-
       VSCode tasks.json with runOn:folderOpen detected. Tasks configured to run
       automatically when opening a folder can execute arbitrary code without
-      user interaction.
+      user interaction. Also applies to Cursor and Windsurf which share this format.
     languages: [json]
     severity: ERROR
     metadata:
@@ -78,3 +85,45 @@ rules:
           { ..., "shell": "$CMD", ... }
       - pattern: |
           { ..., "command": "$CMD", ... }
+
+  - id: aider-hook-execution
+    message: >-
+      Aider config file with executable hook detected. The test-cmd, lint-cmd,
+      and notifications-command fields execute arbitrary shell commands after
+      every AI-generated change.
+    languages: [generic]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "9.0"
+      attack-vector: supply-chain
+    paths:
+      include:
+        - ".aider.conf.yml"
+        - "**/.aider.conf.yml"
+    pattern-regex: "(?i)(test-cmd|lint-cmd|notifications-command|load)\\s*:\\s*.+(curl|wget|bash|sh|node|python|exec)"
+    options:
+      generic_ellipsis_max_span: 0
+
+  - id: ai-cli-dangerous-flags
+    message: >-
+      AI CLI invoked with permission-bypass flags (--dangerously-skip-permissions,
+      --yolo, --trust-all-tools). These flags disable safety confirmations and
+      enable fully autonomous execution. Detected in the NX supply chain compromise.
+    languages: [generic]
+    severity: ERROR
+    metadata:
+      category: security
+      security-severity: "9.0"
+      attack-vector: supply-chain
+    paths:
+      include:
+        - "**/*.sh"
+        - "**/*.bash"
+        - ".github/workflows/**"
+        - "**/.github/workflows/**"
+        - "Makefile"
+        - "**/Makefile"
+    pattern-regex: "(?i)(--dangerously-skip-permissions|--yolo|--trust-all-tools|--no-verify\\s)"
+    options:
+      generic_ellipsis_max_span: 0
